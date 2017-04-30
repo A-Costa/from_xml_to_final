@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <string.h>
 #include "file_handling.h"
 
 
@@ -71,8 +72,22 @@ enum tags readTag(int fd, POSITION pos){
             }
             switch(c){
                 case '>':
-                    close(lfd);
-                    return INPUT;
+                    if(lseek(lfd, -2, SEEK_CUR) == -1){
+                        perror("lseek_readtag");
+                        exit(1);
+                    }
+                    if(read(lfd, &c, 1) == -1){
+                        perror("read_readtag");
+                        exit(1);
+                    }
+                    switch(c){
+                        case 't':
+                            close(lfd);
+                            return INPUT;
+                        case 'x':
+                            close(lfd);
+                            return INDEX;
+                        }
                 case 's':
                     close(lfd);
                     return INPUTS;
@@ -139,7 +154,27 @@ unsigned long long nTxOuts(int fd, POSITION pos){
         }
         pos = nextTag(lfd, pos);
         t = readTag(lfd, pos);
-    }while(t != TX);
+    }while(t != TX); // chiaramente questo causa un problema: si puo lavorare fino alla penultima tx
+
+    close(lfd);
+    return result;
+}
+
+unsigned long long nTxInputs(int fd, POSITION pos){
+    unsigned long long result = 0;
+    enum tags t;
+
+    int lfd = dup(fd);
+    pos = nextTag(lfd, pos);
+    t = readTag(lfd, pos);
+
+    do{
+        if(t == INPUT){
+            result +=1;
+        }
+        pos = nextTag(lfd, pos);
+        t = readTag(lfd, pos);
+    }while(t != TX); // chiaramente questo causa un problema: si puo lavorare fino alla penultima tx
 
     close(lfd);
     return result;
@@ -148,7 +183,7 @@ unsigned long long nTxOuts(int fd, POSITION pos){
 output* arrayOfTxOuts(int fd, POSITION pos){
     unsigned long long n = nTxOuts(fd, pos);
     unsigned long long i = 0;
-    int j = 0;
+    unsigned long j = 0;
     enum tags t;
 
     output *array;
@@ -185,4 +220,45 @@ output* arrayOfTxOuts(int fd, POSITION pos){
 
     close(lfd);
     return array;
+}
+
+unsigned long getOutIndex(int fd, POSITION pos){
+    int lfd = dup(fd);
+    char buffer[11];
+    char c;
+    int i;
+    if(lseek(lfd, pos+7, SEEK_SET) == -1){
+        perror("lseek_getoutindex");
+        exit(1);
+    }
+    i=0;
+    while(i<10){
+        read(lfd, &c, 1);
+        if(c!='<'){
+            buffer[i] = c;
+            i++;
+        }
+        else{
+            buffer[i] = '\0';
+            break;
+        }
+    }
+
+    close(lfd);
+    char *end;
+    return strtoul(buffer, &end, 10);
+}
+
+
+void getInHash(int fd, POSITION pos, char *hash){
+    int lfd = dup(fd);
+    if(lseek(lfd, pos+12, SEEK_SET) == -1){
+        perror("lseek_gethash");
+        exit(1);
+    }
+    if(read(lfd, hash, 64) == -1){
+        perror("read_gethash");
+        exit(1);
+    }
+    close(lfd);
 }

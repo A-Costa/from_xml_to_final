@@ -1,6 +1,6 @@
 typedef struct output_s{
     char address[64];
-    int address_length;
+    unsigned long address_length;
 }output;
 
 typedef struct tx_outputs_s{
